@@ -1,12 +1,4 @@
-# AiraaCheisyaa CRD (VirtualBox & Performance Boost) — Upgraded
-# Purpose: Hardened, high-performance GitHub Actions workflow for creating a Windows user,
-# installing VirtualBox + Chrome Remote Desktop (CRD), applying advanced performance
-# optimizations and optional VM provisioning. Designed to be resilient, secure (masking
-# sensitive values), and to include proactive diagnostics and rollback.
-# Notes: Some VirtualBox features require host virtualization support; the workflow
-# detects that and falls back gracefully if virtualization isn't available on the runner.
-
-name: AiraaCheisyaa CRD (VirtualBox & Performance Boost — Upgraded)
+name: AiraaCheisyaa CRD (Overpowered - Manual Input)
 
 on:
   workflow_dispatch:
@@ -15,294 +7,120 @@ on:
         description: 'Salin dan tempel SELURUH perintah dari halaman CRD Headless (CMD atau PowerShell)'
         required: true
 
-concurrency:
-  group: "airaa-crd-${{ github.run_id }}"
-  cancel-in-progress: false
-
-permissions:
-  contents: read
-  id-token: write
-
 jobs:
-  setup-windows:
+  build:
     runs-on: windows-latest
-    timeout-minutes: 360
+
     steps:
-      - name: 'Start transcript (detailed log)'
-        shell: pwsh
+      - name: ☁️ Preparing Environment
         run: |
-          Start-Transcript -Path "$env:TEMP\airaa_workflow_transcript.txt" -Force
-
-      - name: 'Prepare secure runtime values & mask them'
-        id: prepare
+          Write-Host "📦 Menginstal Chrome Remote Desktop..."
+          Invoke-WebRequest -Uri "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi" -OutFile "crd.msi"
+          Start-Process msiexec.exe -Wait -ArgumentList '/i crd.msi /qn'
+          Write-Host "✅ CRD Terinstal."
         shell: pwsh
-        run: |
-          # Generate a cryptographically-random password and mask it from logs
-          Add-Type -AssemblyName System.Web
-          $rng = New-Object System.Security.Cryptography.RNGCryptoServiceProvider
-          $bytes = New-Object 'byte[]' (32)
-          $rng.GetBytes($bytes)
-          $randomBase64 = [Convert]::ToBase64String($bytes)
-          # Create a strong but filesystem-safe password usable by Windows (strip =,+/)
-          $password = ($randomBase64 -replace '[/=+]','X').Substring(0,20)
-          Write-Host "::add-mask::$password"
-          Write-Host "WINDOWS_PASSWORD=$password" >> $env:GITHUB_ENV
-          Write-Host "PASSWORD_MASKED=true" >> $env:GITHUB_ENV
 
-      - name: 'Create local administrator user (secure)'
+      - name: 🚀 Applying Overpowered Tweaks
+        run: |
+          Write-Host "🚀 Menerapkan optimasi sistem yang agresif..."
+          
+          # 1. Power Plan: Ultimate Performance (jika ada) atau High Performance
+          powercfg /s SCHEME_MIN
+          powercfg -setacvalueindex SCHEME_MIN SUB_PROCESSOR PROCTHROTTLEMAX 100
+          powercfg -setacvalueindex SCHEME_MIN SUB_PROCESSOR PROCTHROTTLEMIN 100
+          powercfg -setactive SCHEME_MIN
+          Write-Host "⚡ Power Plan diatur ke High Performance."
+
+          # 2. Disable Windows Defender (lebih agresif)
+          Set-MpPreference -DisableRealtimeMonitoring $true -Force
+          Set-MpPreference -DisableBehaviorMonitoring $true -Force
+          Set-MpPreference -DisableBlockAtFirstSeen $true -Force
+          Set-MpPreference -DisableIOAVProtection $true -Force
+          Set-MpPreference -DisableScriptScanning $true -Force
+          Set-MpPreference -EnableControlledFolderAccess Disabled -Force
+          Write-Host "🛡️ Windows Defender dinonaktifkan sepenuhnya."
+
+          # 3. Disable Services (lebih banyak service)
+          $servicesToDisable = @("wuauserv", "WSearch", "SysMain", "BITS", "DoSvc")
+          foreach ($service in $servicesToDisable) {
+            Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
+            Set-Service -Name $service -StartupType Disabled -ErrorAction SilentlyContinue
+          }
+          Write-Host "⚙️ Service yang tidak perlu telah dinonaktifkan."
+
+          # 4. Optimize Visual Effects for Performance
+          Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects' -Name 'VisualFxSetting' -Value 2
+          $visualEffectsPath = "HKCU:\Control Panel\Desktop"
+          Set-ItemProperty -Path $visualEffectsPath -Name 'DragFullWindows' -Value '0'
+          Set-ItemProperty -Path $visualEffectsPath -Name 'FontSmoothing' -Value '0'
+          Set-ItemProperty -Path $visualEffectsPath -Name 'UserPreferencesMask' -Value ([byte[]](0x90,0x12,0x03,0x80,0x10,0x00,0x00,0x00))
+          Write-Host "🎨 Efek visual telah dioptimalkan untuk performa."
+
+          # 5. Network & TCP Optimizations
+          netsh int tcp set global autotuninglevel=highlyrestricted
+          netsh int tcp set global chimney=disabled
+          netsh int tcp set global rss=disabled
+          netsh int tcp set global ecncapability=disabled
+          Write-Host "🌐 Jaringan dioptimalkan untuk latensi rendah."
+          
+          # 6. Disable Windows Firewall (WARNING: Use with caution)
+          netsh advfirewall set allprofiles state off
+          Write-Host "🔥 Windows Firewall dinonaktifkan (Performa Maksimal)."
+          
+          Write-Host "✅ Semua tweak performa 'Over Power' telah diterapkan."
         shell: pwsh
+
+      - name: 🔗 Connecting to Chrome Remote Desktop
         run: |
-          try {
-            $userName = 'AiraaCheisyaa'
-            $passwordPlain = (Get-Content Env:GITHUB_ENV | Select-String 'WINDOWS_PASSWORD' | ForEach-Object { $_ -replace 'WINDOWS_PASSWORD=' , '' }).Trim()
-            if (-not $passwordPlain) { throw 'Missing generated password' }
-
-            # Create the user if it doesn't exist
-            if (-not (Get-LocalUser -Name $userName -ErrorAction SilentlyContinue)) {
-              $securePwd = ConvertTo-SecureString $passwordPlain -AsPlainText -Force
-              New-LocalUser -Name $userName -Password $securePwd -FullName 'Airaa Cheisyaa' -Description 'Transient runner user for CRD sessions' -PasswordNeverExpires:$true
-              Add-LocalGroupMember -Group 'Administrators' -Member $userName
-              Write-Host "User $userName created and added to Administrators"
-            } else {
-              Write-Host "User $userName already exists — skipping creation"
-            }
-
-            # Save masked credentials to env for later steps (still masked)
-            Write-Host "::add-mask::$userName"
-            Write-Host "WINDOWS_USER=$userName" >> $env:GITHUB_ENV
-          } catch {
-            Write-Host "Failed to create user: $_"; exit 1
+          $FullCommand = '${{ github.event.inputs.crd_full_command }}'
+          
+          # Ekstraksi AuthCode/Token dari perintah yang di-paste pengguna
+          $AuthCode = ''
+          if ($FullCommand -match '--code="(.+?)"') {
+              $AuthCode = "--code=`"$($matches[1])`" --redirect-url=`"https://remotedesktop.google.com/_/oauthredirect`""
+          } elseif ($FullCommand -match '--token="(.+?)"') {
+              $AuthCode = "--token=`"$($matches[1])`""
+          } else {
+              Write-Error "❌ Auth Code atau Token tidak ditemukan dalam perintah yang Anda berikan."
+              exit 1
           }
 
-      - name: 'Preflight checks: virtualization, memory, and CPU info'
-        shell: pwsh
-        run: |
-          $virtEnabled = \$false
-          try {
-            $cpu = Get-CimInstance -ClassName Win32_Processor
-            if ($cpu.VirtualizationFirmwareEnabled) { $virtEnabled = \$true }
-          } catch { Write-Host "Could not query virtualization flag: $_" }
-
-          Write-Host "VIRTUALIZATION_AVAILABLE=$virtEnabled" >> $env:GITHUB_ENV
-          Write-Host "TOTAL_PHYSICAL_MEM_MB=$(Get-CimInstance -ClassName Win32_ComputerSystem | Select-Object -ExpandProperty TotalPhysicalMemory / 1MB)" >> $env:GITHUB_ENV
-          Write-Host "CPU_COUNT=$(Get-WmiObject -Class Win32_ComputerSystem).NumberOfLogicalProcessors" >> $env:GITHUB_ENV
-
-      - name: 'Install Chocolatey (if missing) and core tools in parallel'
-        shell: pwsh
-        run: |
-          # Use a lightweight, idempotent choco bootstrap
-          if (-not (Get-Command choco.exe -ErrorAction SilentlyContinue)) {
-            Set-ExecutionPolicy Bypass -Scope Process -Force
-            irm https://community.chocolatey.org/install.ps1 | iex
+          $HostName = "gh-runner-${{ github.run_id }}"
+          $PIN = "123456" # PIN Statis dikembalikan
+          
+          # Menjalankan CRD Host menggunakan perintah yang diekstrak
+          $ArgumentList = "$AuthCode --name=`"$HostName`" -pin=`"$PIN`""
+          Start-Process -FilePath "C:\Program Files (x86)\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe" -ArgumentList $ArgumentList
+          
+          # Loop pengecekan dan peningkatkan prioritas proses (lebih stabil)
+          Write-Host "⏳ Menunggu proses CRD Host aktif..."
+          $crdProcess = $null
+          $timeout = 15 # detik
+          $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+          
+          while ($crdProcess -eq $null -and $stopwatch.Elapsed.TotalSeconds -lt $timeout) {
+            $crdProcess = Get-Process -Name "remoting_host" -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 1
+          }
+          $stopwatch.Stop()
+          
+          if ($crdProcess) {
+            $crdProcess.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
+            Write-Host ("🔥 Prioritas CRD Host PID: " + $crdProcess.Id + " telah ditingkatkan ke HIGH.")
+          } else {
+            Write-Warning "⚠️ Proses CRD tidak ditemukan setelah $timeout detik."
           }
 
-          # Install packages concurrently with Start-Job for speed
-          $packages = @('7zip','sysinternals','zip','unzip','curl','wget','iperf3')
-          foreach ($pkg in $packages) {
-            Start-Job -ScriptBlock { param($p) choco install $p -y --no-progress } -ArgumentList $pkg | Out-Null
-          }
-          # VirtualBox and Google CRD installed via direct installers for more control
-
-          # Wait for background installs to finish but don't block the entire runner forever
-          Get-Job | Wait-Job -Timeout 600 | Out-Null
-          Get-Job | Receive-Job | Out-Null
-          Get-Job | Remove-Job -Force
-
-      - name: 'Download and install VirtualBox (controlled, latest stable fallback)'
-        if: env.VIRTUALIZATION_AVAILABLE == 'True'
+          Write-Host "========================= RDP INFO ========================="
+          Write-Host "✅ Host Name  : $HostName"
+          Write-Host "✅ PIN        : $PIN  (PIN Statis)"
+          Write-Host "✅ User       : runneradmin"
+          Write-Host "✅ Password   : (Gunakan password default dari GitHub)"
+          Write-Host "============================================================"
+          Write-Host "💡 Sesi RDP aktif. Workflow akan terus berjalan..."
         shell: pwsh
-        run: |
-          $vboxUrl = 'https://download.virtualbox.org/virtualbox/7.0.10/VirtualBox-7.0.10-143286-Win.exe'
-          $installer = "$env:TEMP\vbox_installer.exe"
-          Invoke-WebRequest -Uri $vboxUrl -OutFile $installer
 
-          # Install silently and wait
-          Start-Process -FilePath $installer -ArgumentList '/S' -Wait
-
-          # Configure VirtualBox global performance defaults (if VBoxManage available)
-          $vboxManage = "$env:ProgramFiles\Oracle\VirtualBox\VBoxManage.exe"
-          if (Test-Path $vboxManage) {
-            & $vboxManage setproperty hwvirtex on
-            & $vboxManage setextradata global GUI/ScaleFactor 1
-            Write-Host 'Configured basic VirtualBox global properties for performance.'
-          } else { Write-Warning 'VBoxManage not found — skipping VirtualBox post-config.' }
-
-      - name: 'Download and install Chrome Remote Desktop (CRD) host'
+      - name: 💻 Keep Runner Alive
+        run: Start-Sleep -Seconds 21000 # Sedikit di bawah 6 jam untuk keamanan
         shell: pwsh
-        run: |
-          $crdMsi = "$env:TEMP\crd.msi"
-          Invoke-WebRequest -Uri 'https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi' -OutFile $crdMsi
-          Start-Process msiexec.exe -ArgumentList "/i `"$crdMsi`" /qn" -Wait
-
-      - name: 'Pulse: aggressive Windows performance tweaks (safe defaults + fallbacks)'
-        shell: pwsh
-        run: |
-          Write-Host 'Applying performance tweaks — many of these are reversible. Proceeding with safe defaults.'
-
-          # Set Power Plan to High performance
-          powercfg /S SCHEME_MIN
-
-          # Reduce visual effects (favor responsiveness)
-          Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects' -Name 'VisualFxSetting' -Value 2 -ErrorAction SilentlyContinue
-
-          # Disable services that commonly hurt responsiveness on CI runners
-          $servicesToDisable = @('SysMain','wuauserv','WSearch','PcaSvc')
-          foreach ($svc in $servicesToDisable) {
-            if (Get-Service -Name $svc -ErrorAction SilentlyContinue) {
-              Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
-              Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
-              Write-Host "Service $svc stopped and disabled"
-            }
-          }
-
-          # Set Windows to prefer foreground apps (interactive responsiveness)
-          New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl' -Name 'Win32PrioritySeparation' -PropertyType DWord -Value 26 -Force | Out-Null
-
-          # Improve network TCP stack for remote desktop responsiveness
-          netsh int tcp set global autotuninglevel=normal congestionprovider=ctcp ecncapability=enabled chimneys=disabled rss=enabled
-
-          # Disable Nagle for improved RDP interactive latency on this host
-          New-Item -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces' -ErrorAction SilentlyContinue | Out-Null
-
-          Write-Host 'Performance tweaks applied. Some changes require a restart to take full effect.'
-
-      - name: 'Defender: add exclusions for VirtualBox & CRD (reduce IO scan overhead)'
-        shell: pwsh
-        run: |
-          try {
-            $paths = @('C:\Program Files\Oracle\VirtualBox','C:\Program Files (x86)\Google\Chrome Remote Desktop')
-            foreach ($p in $paths) {
-              if (Test-Path $p) {
-                Add-MpPreference -ExclusionPath $p -ErrorAction SilentlyContinue
-                Write-Host "Added Defender exclusion: $p"
-              }
-            }
-          } catch { Write-Warning "Could not modify Defender preferences: $_" }
-
-      - name: 'Start CRD host (securely parse auth code & keep PIN masked)'
-        id: start_crd
-        shell: pwsh
-        env:
-          CRD_FULL_COMMAND: ${{ github.event.inputs.crd_full_command }}
-        run: |
-          try {
-            $FullCommand = $env:CRD_FULL_COMMAND
-            if (-not $FullCommand) { throw 'No CRD full command provided as input.' }
-
-            # Try several patterns (PowerShell/CMD can vary). Support both --code="..." and "--code=..."
-            $patterns = @('--code="(?<code>[^\"]+)"','--code=(?<code>[^\s]+)')
-            $AuthCode = $null
-            foreach ($p in $patterns) {
-              $m = [regex]::Match($FullCommand,$p)
-              if ($m.Success) { $AuthCode = $m.Groups['code'].Value; break }
-            }
-            if (-not $AuthCode) { throw 'Authorization code not found in provided CRD command.' }
-
-            # Create a masked PIN and mask it from logs
-            $pin = (Get-Random -Minimum 100000 -Maximum 999999).ToString()
-            Write-Host "::add-mask::$pin"
-            Write-Host "CRD_PIN=$pin" >> $env:GITHUB_ENV
-
-            # Determine CRD host executable location
-            $possiblePaths = @("C:\Program Files (x86)\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe", 
-                                "C:\Program Files\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe")
-            $exe = $possiblePaths | Where-Object { Test-Path $_ } | Select-Object -First 1
-            if (-not $exe) { throw 'remoting_start_host.exe not found after install' }
-
-            $HostName = "gh-runner-${{ github.run_id }}"
-            $startArgs = "--code=\"$AuthCode\" --redirect-url=\"https://remotedesktop.google.com/_/oauthredirect\" --name=\"$HostName\" --pin=\"$pin\""
-
-            Start-Process -FilePath $exe -ArgumentList $startArgs -WindowStyle Hidden
-            Write-Host 'CRD host start command issued.'
-
-            Start-Sleep -Seconds 12
-
-            # Boost remoting host process priority safely if found
-            $proc = Get-Process | Where-Object { $_.ProcessName -match 'remoting' -or $_.Path -like '*remoting_start_host*' } | Select-Object -First 1
-            if ($proc) {
-              try {
-                $proc.PriorityClass = 'High'
-                Write-Host "Boosted CRD process PID $($proc.Id) to High priority."
-              } catch { Write-Warning "Could not set priority: $_" }
-            } else { Write-Warning 'CRD process not discovered; it may still be initializing.' }
-
-            Write-Host "CRD_HOSTNAME=$HostName" >> $env:GITHUB_ENV
-          } catch {
-            Write-Host "Error starting CRD: $_"; exit 1
-          }
-
-      - name: 'Optional: Create and boot optimized headless VM (if virtualization available)'
-        if: env.VIRTUALIZATION_AVAILABLE == 'True'
-        shell: pwsh
-        run: |
-          try {
-            $vboxManage = "$env:ProgramFiles\Oracle\VirtualBox\VBoxManage.exe"
-            if (-not (Test-Path $vboxManage)) { Write-Warning 'VBoxManage not found; skipping VM creation'; return }
-
-            # Create an ultra-light VM template optimized for remote desktop & headless boot
-            $vmName = "airaa-vm-${{ github.run_id }}"
-            & $vboxManage createvm --name $vmName --register | Out-Null
-            & $vboxManage modifyvm $vmName --ostype Windows10_64 --cpus 2 --memory 4096 --vram 16 --largepages off --paravirtprovider spinlocks --ioapic on --nested-hw-virt on --groups "/AIRAA" --pae off
-
-            # Speedy disk (dynamically allocated, but small initial size). Adjust as needed.
-            $vdi = "$env:USERPROFILE\VirtualBox VMs\$vmName\$vmName.vdi"
-            & $vboxManage createmedium disk --filename $vdi --size 32768 --format VDI
-
-            & $vboxManage storagectl $vmName --name "SATA Controller" --add sata --controller IntelAhci
-            & $vboxManage storageattach $vmName --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium $vdi
-
-            # Start headless
-            & $vboxManage startvm $vmName --type headless
-            Write-Host "VM $vmName created and started in headless mode."
-          } catch { Write-Warning "VM provisioning skipped/error: $_" }
-
-      - name: 'Quick health checks: ping, iperf, and process snapshot'
-        shell: pwsh
-        run: |
-          Get-Process | Sort-Object CPU -Descending | Select-Object -First 10 | Format-Table -AutoSize
-          if (Get-Command iperf3 -ErrorAction SilentlyContinue) { iperf3 --version }
-          ping -n 3 8.8.8.8
-
-      - name: 'Upload diagnostics (transcript & logs) as artifact'
-        uses: actions/upload-artifact@v4
-        with:
-          name: airaa-windows-diagnostics
-          path: |
-            $env:TEMP\airaa_workflow_transcript.txt
-            $env:TEMP\vbox_installer.exe
-
-      - name: 'Keep Runner Alive with monitored session (adaptive wait)'
-        shell: pwsh
-        run: |
-          # Keep alive loop for interactive troubleshooting but check that CRD is running.
-          $maxHours = 6
-          $end = (Get-Date).AddHours($maxHours)
-          while ((Get-Date) -lt $end) {
-            $crd = Get-Process | Where-Object { $_.ProcessName -like '*remoting*' } -ErrorAction SilentlyContinue
-            if (-not $crd) { Write-Warning 'CRD process not found — attempt to restart once.'; break }
-            Start-Sleep -Seconds 60
-          }
-
-      - name: 'Stop transcript and show final summary'
-        shell: pwsh
-        run: |
-          Stop-Transcript
-          Write-Host '=========================== SUMMARY ==========================='
-          Write-Host "User: $env:WINDOWS_USER"
-          Write-Host "(Masked) Password: *** (masked in logs)"
-          Write-Host "CRD Hostname: $env:CRD_HOSTNAME"
-          Write-Host "CRD PIN: (masked)"
-          Write-Host "Virtualization available: $env:VIRTUALIZATION_AVAILABLE"
-          Write-Host '================================================================'
-
-      - name: 'Finish — keep workflow alive message'
-        shell: pwsh
-        run: |
-          Write-Host "Workflow finished setup steps. If you need longer-lived sessions, re-run with modified timeout-minutes."
-
-# End of workflow
-# -----------------
-# Suggested next steps for you (Iraa):
-# 1) If you plan to run heavy VMs, consider using a self-hosted runner with nested virtualization enabled.
-# 2) If you want, I can further adapt this workflow to automatically mount an ISO and run an unattended Windows install inside the VM.
-# 3) All sensitive values are masked. If you want the password to be stored encrypted in repo secrets, say the word and I'll adjust.
+        
