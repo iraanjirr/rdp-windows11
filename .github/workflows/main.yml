@@ -1,4 +1,4 @@
-name: AiraaCheisyaa CRD (Overpowered - Manual Input)
+name: AiraaCheisyaa CRD (Overpowered - Fixed)
 
 on:
   workflow_dispatch:
@@ -24,14 +24,14 @@ jobs:
         run: |
           Write-Host "🚀 Menerapkan optimasi sistem yang agresif..."
           
-          # 1. Power Plan: Ultimate Performance (jika ada) atau High Performance
+          # 1. Power Plan
           powercfg /s SCHEME_MIN
           powercfg -setacvalueindex SCHEME_MIN SUB_PROCESSOR PROCTHROTTLEMAX 100
           powercfg -setacvalueindex SCHEME_MIN SUB_PROCESSOR PROCTHROTTLEMIN 100
           powercfg -setactive SCHEME_MIN
           Write-Host "⚡ Power Plan diatur ke High Performance."
 
-          # 2. Disable Windows Defender (lebih agresif)
+          # 2. Disable Windows Defender
           Set-MpPreference -DisableRealtimeMonitoring $true -Force
           Set-MpPreference -DisableBehaviorMonitoring $true -Force
           Set-MpPreference -DisableBlockAtFirstSeen $true -Force
@@ -40,7 +40,7 @@ jobs:
           Set-MpPreference -EnableControlledFolderAccess Disabled -Force
           Write-Host "🛡️ Windows Defender dinonaktifkan sepenuhnya."
 
-          # 3. Disable Services (lebih banyak service)
+          # 3. Disable Services
           $servicesToDisable = @("wuauserv", "WSearch", "SysMain", "BITS", "DoSvc")
           foreach ($service in $servicesToDisable) {
             Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
@@ -48,7 +48,7 @@ jobs:
           }
           Write-Host "⚙️ Service yang tidak perlu telah dinonaktifkan."
 
-          # 4. Optimize Visual Effects for Performance
+          # 4. Optimize Visual Effects
           Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects' -Name 'VisualFxSetting' -Value 2
           $visualEffectsPath = "HKCU:\Control Panel\Desktop"
           Set-ItemProperty -Path $visualEffectsPath -Name 'DragFullWindows' -Value '0'
@@ -58,12 +58,12 @@ jobs:
 
           # 5. Network & TCP Optimizations
           netsh int tcp set global autotuninglevel=highlyrestricted
-          netsh int tcp set global chimney=disabled
+          # FIX: Menghapus 'chimney=disabled' karena sudah usang dan menyebabkan eror.
           netsh int tcp set global rss=disabled
           netsh int tcp set global ecncapability=disabled
           Write-Host "🌐 Jaringan dioptimalkan untuk latensi rendah."
           
-          # 6. Disable Windows Firewall (WARNING: Use with caution)
+          # 6. Disable Windows Firewall
           netsh advfirewall set allprofiles state off
           Write-Host "🔥 Windows Firewall dinonaktifkan (Performa Maksimal)."
           
@@ -74,7 +74,6 @@ jobs:
         run: |
           $FullCommand = '${{ github.event.inputs.crd_full_command }}'
           
-          # Ekstraksi AuthCode/Token dari perintah yang di-paste pengguna
           $AuthCode = ''
           if ($FullCommand -match '--code="(.+?)"') {
               $AuthCode = "--code=`"$($matches[1])`" --redirect-url=`"https://remotedesktop.google.com/_/oauthredirect`""
@@ -86,29 +85,23 @@ jobs:
           }
 
           $HostName = "gh-runner-${{ github.run_id }}"
-          $PIN = "123456" # PIN Statis dikembalikan
+          $PIN = "123456"
           
-          # Menjalankan CRD Host menggunakan perintah yang diekstrak
           $ArgumentList = "$AuthCode --name=`"$HostName`" -pin=`"$PIN`""
           Start-Process -FilePath "C:\Program Files (x86)\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe" -ArgumentList $ArgumentList
           
-          # Loop pengecekan dan peningkatkan prioritas proses (lebih stabil)
           Write-Host "⏳ Menunggu proses CRD Host aktif..."
-          $crdProcess = $null
-          $timeout = 15 # detik
-          $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+          Start-Sleep -Seconds 10 # Beri jeda agar proses sempat muncul
           
-          while ($crdProcess -eq $null -and $stopwatch.Elapsed.TotalSeconds -lt $timeout) {
-            $crdProcess = Get-Process -Name "remoting_host" -ErrorAction SilentlyContinue
-            Start-Sleep -Seconds 1
-          }
-          $stopwatch.Stop()
-          
-          if ($crdProcess) {
-            $crdProcess.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
-            Write-Host ("🔥 Prioritas CRD Host PID: " + $crdProcess.Id + " telah ditingkatkan ke HIGH.")
-          } else {
-            Write-Warning "⚠️ Proses CRD tidak ditemukan setelah $timeout detik."
+          # FIX: Menggunakan loop untuk menangani satu atau lebih proses CRD
+          try {
+            $crdProcesses = Get-Process -Name "remoting_host" -ErrorAction Stop
+            foreach ($process in $crdProcesses) {
+              $process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
+              Write-Host ("🔥 Prioritas CRD Host PID: " + $process.Id + " telah ditingkatkan ke HIGH.")
+            }
+          } catch {
+            Write-Warning "⚠️ Gagal menemukan atau meningkatkan prioritas proses CRD."
           }
 
           Write-Host "========================= RDP INFO ========================="
@@ -121,6 +114,5 @@ jobs:
         shell: pwsh
 
       - name: 💻 Keep Runner Alive
-        run: Start-Sleep -Seconds 21000 # Sedikit di bawah 6 jam untuk keamanan
+        run: Start-Sleep -Seconds 21000
         shell: pwsh
-        
